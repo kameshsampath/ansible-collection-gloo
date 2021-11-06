@@ -1,0 +1,7 @@
+#jinja2: lstrip_blocks: "True"
+licenseKey: {{ mesh_license_key }}
+rbacWebhook:
+  enabled: true
+  adminSubjects:
+  - name: "system:masters"
+    kind: Groups

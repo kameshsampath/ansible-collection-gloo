@@ -1,0 +1,147 @@
+- name: "Ensure Gloo Mesh Clusters"
+  fail:
+    msg: "Please define the Kubernetes clusters for Gloo Mesh using 'gloo_clusters' dictionary"
+  when: gloo_clusters is not defined 
+
+- name: "Add Gloo Mesh Helm Repo"
+  kubernetes.core.helm_repository:
+    name: gloo-mesh-enterprise
+    repo_url: "https://storage.googleapis.com/gloo-mesh-enterprise/gloo-mesh-enterprise"
+
+- name: "Query Gloo Mesh Versions"
+  ansible.builtin.command:
+    argv:
+      - helm
+      - search 
+      - repo
+      - gloo-mesh-enterprise/gloo-mesh-enterprise
+      - -ojson
+  register: gloo_mesh_ee_version_info
+  changed_when: false
+  when: gloo_mesh_ee_version is not defined
+
+- name: "Fail when version Gloo Mesh info does not exist"
+  fail:
+    msg: "Gloo Mesh EE Version not available"
+  when: gloo_mesh_ee_version is not defined and gloo_mesh_ee_version_info.stdout is not defined
+
+- name: "Set Gloo Mesh EE Version"
+  set_fact:
+    gloo_mesh_ee_version: "{{ gloo_mesh_ee_version_info.stdout  | from_json | first | community.general.json_query('version') }}"
+  when: gloo_mesh_ee_version is not defined
+
+- name: "Gloo Mesh Version"
+  debug: 
+    var: gloo_mesh_ee_version }}
+
+- name: "Set Gloo EE License Facts"
+  set_fact:
+    mesh_license_key: "{{ lookup('env', 'GLOO_MESH_LICENSE_KEY') }}"
+
+- name: "Ensure Gloo Mesh License Key is defined"
+  fail:
+    msg: "Gloo License Key not defined, please define it via environment variable '$GLOO_MESH_LICENSE_KEY'"
+  when: mesh_license_key is not defined
+
+- name: "Create temporary gloo install directory"
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: "{{ 'gloo_mesh_ee'+ gloo_mesh_ee_version }}"
+  register: gloo_mesh_install_tmpdir
+
+- name: "Ensure meshctl File for RedHat/Ubuntu"
+  ansible.builtin.get_url:
+    url: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-linux-amd64.sha256"
+    dest: "/tmp/meshctl.sha256"
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Debian" 
+
+- name: "Ensure meshctl File for Darwin"
+  ansible.builtin.get_url:
+    url: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-darwin-amd64.sha256"
+    dest: "/tmp/meshctl.sha256"
+  when: ansible_os_family == "Darwin"
+
+- name: "Ensure meshctl File for RedHat/Ubuntu"
+  set_fact:
+    meshctl_download_file: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-linux-amd64"
+    meshctl_sha256_checksum: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-darwin-amd64.sha256"
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Debian"
+
+- name: "Ensure meshctl File for Darwin"
+  set_fact:
+    meshctl_download_file: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-darwin-amd64"
+    meshctl_sha256_checksum: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-darwin-amd64.sha256"
+  when: ansible_os_family == "Darwin" 
+
+- name: "Find the sha256 of meshctl"
+  ansible.builtin.slurp:
+    src: /tmp/meshctl.sha256
+  register: meshctl_sha256
+
+- name: "Make meshctl home"
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.gloo/bin"
+    recurse: yes
+    state: directory
+  
+- name: "Set meshctl sha256 checksum" 
+  set_fact: 
+    meshctl_sha256_checksum: "{{ meshctl_sha256.content | b64decode | split(' ') | first | trim }}"
+
+- name: "Ensure Gloo bin"
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.gloo-mesh/bin"
+    state: directory
+
+- name: "Download meshctl"
+  ansible.builtin.get_url:
+    url: "{{ meshctl_download_file }}"
+    checksum: "sha256:{{ meshctl_sha256_checksum  }}"
+    dest: "{{ ansible_env.HOME }}/.gloo-mesh/bin/meshctl"
+    mode: "0755"
+  register: downloaded_meshctl
+
+- name: "Create Gloo Mesh EE Helm Values"
+  template:
+    src: "mesh_override_values.yaml.j2"
+    dest: "{{ gloo_mesh_install_tmpdir.path }}/install-overrides.yaml"
+  register: gloo_mesh_install_override_file
+
+- name: "Set Gloo Helm Value File Facts"
+  set_fact:
+    gloo_mesh_install_override_files: "{{ gloo_mesh_install_override_files + [gloo_mesh_install_override_file.dest] }}"
+
+- name: "Deploy Gloo Mesh Enterprise"
+  kubernetes.core.helm:
+    release_name: gloo-enterprise
+    chart_ref: gloo-mesh-enterprise/gloo-mesh-enterprise
+    release_namespace: gloo-mesh
+    create_namespace: yes
+    chart_version: "{{ gloo_mesh_ee_version }}"
+    values_files: "{{ gloo_mesh_install_override_files }}"
+    update_repo_cache: yes
+    context: "{{ item.value.k8s_context }}"
+  loop: "{{ gloo_clusters | dict2items}}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.key == "mgmt"
+
+- name: "Wait for Enteprise Networking Pod to be running"
+  include: utils/deployment_check.yml
+  vars:
+    deployment_name: enterprise-networking
+    deployment_namespace: gloo-mesh
+    deployment_context: "{{ item.value.k8s_context }}"
+  loop: "{{ gloo_clusters | dict2items}}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.key == "mgmt"
+# TODO Register meshes
+
+- name: "Register Cluster to Mesh"
+  debug:
+   msg: "Register mesh {{ item.key }}"
+  loop: "{{ gloo_clusters | dict2items}}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.key != "mgmt"

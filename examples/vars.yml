@@ -1,0 +1,33 @@
+# miniukube Kubernetes Clusters
+minikube_profiles:
+  mgmt:
+    create: yes
+    destroy: no
+    cpus: 2
+    memory: 4g
+    addons:
+      - metallb
+  cluster1:
+    create: yes
+    destroy: no
+    addons:
+      - metallb
+  cluster2:
+    create: yes
+    destroy: no
+    addons:
+      - metallb
+# Gloo Mesh Kubernetes clusters
+gloo_clusters:
+  mgmt:
+    cloud: minikube
+    k8s_context: mgmt
+    install_istio: no
+  cluster1:
+    cloud: minikube
+    k8s_context: cluster1
+    install_istio: yes
+  cluster2:
+    cloud: minikube
+    k8s_context: cluster2
+    install_istio: yes

@@ -1,0 +1,13 @@
+istio_namespaces:
+  - istio-operator
+  - istio-system
+  - istio-gateways
+  - istio-config
+istio_installs:
+  1.11.4:
+    # darwin-sha256: 663496e25e7de52ecb00e600cb54496c98e619f97629ba5c1841b4eb34e902c0
+    # linux-sha256: 32707044bff538b8e827eae21dd3694dac78d429d9aeeb9ee606882e3b938499
+    install: yes
+    #k8s_contexts:
+      # - cluster1 
+      # - cluster2 

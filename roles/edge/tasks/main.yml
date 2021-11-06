@@ -1,0 +1,147 @@
+- name: "Add Gloo Edge Helm Repo"
+  kubernetes.core.helm_repository:
+    name: glooe
+    repo_url: "https://storage.googleapis.com/gloo-ee-helm"
+
+- name: "Add Gloo Portal Helm Repo"
+  kubernetes.core.helm_repository:
+    name: gloo-portal
+    repo_url: "https://storage.googleapis.com/dev-portal-helm"
+
+- name: "Query Gloo Edge Versions"
+  ansible.builtin.command:
+    argv:
+      - helm
+      - search 
+      - repo
+      - glooe/gloo-ee
+      - -ojson
+  register: gloo_ee_version_info
+  changed_when: false
+
+- name: "Query Gloo Portal Versions"
+  ansible.builtin.command:
+    argv:
+      - helm
+      - search 
+      - repo 
+      - gloo-portal/gloo-portal 
+      - -ojson
+  register: gloo_portal_version_info
+  changed_when: false
+
+- name: "Fail when version info does not exist"
+  fail:
+    msg: "Gloo EE Version or Gloo Portal Version not available"
+  when: gloo_portal_version_info.stdout is not defined or gloo_portal_version_info.stdout is not defined
+
+- name: "Set Gloo Facts"
+  set_fact:
+    edge_license_key: "{{ lookup('env', 'LICENSE_KEY') }}"
+    gloo_ee_version: "{{ gloo_ee_version_info.stdout  | from_json | first | community.general.json_query('version') }}"
+    gloo_portal_version: "{{ gloo_portal_version_info.stdout  | from_json | first | community.general.json_query('version') }}"
+    gloo_install_override_files: []
+    gloo_portal_override_files: []
+
+- name: "Ensure Gloo License Key is defined"
+  fail:
+    msg: "Gloo License Key not defined, please define it via environment variable '$LICENSE_KEY'"
+  when: edge_license_key is not defined
+
+- name: "Create temporary gloo install directory"
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: "{{ 'gloo_ee_'+ gloo_ee_version }}"
+  register: gloo_install_tmpdir
+
+- name: "Download glooctl(linux) checksum"
+  ansible.builitin.get_url:
+    uri: "https://github.com/solo-io/gloo/releases/download/v{{ gloo_ee_version }}/glooctl-linux-amd64.sha256"
+    dest: "/tmp/glooctl.sha256"
+    mode: 755
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Debian" 
+
+- name: "Download glooctl(linux) checksum"
+  ansible.builitin.get_url:
+    uri: "https://github.com/solo-io/gloo/releases/download/v{{ gloo_ee_version }}/glooctl-darwin-amd64.sha256"
+    dest: "/tmp/glooctl.sha256"
+    mode: 755
+  when: ansible_os_family == "Darwin"
+
+- name: "Ensure glooctl File for {{ ansible_os_family}}"
+  set_fact:
+    glooctl_download_file: "https://github.com/solo-io/gloo/releases/download/v{{ gloo_ee_version }}/glooctl-linux-amd64"
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Debian"
+
+- name: "Ensure glooctl File for {{ ansible_os_family}}"
+  set_fact:
+    glooctl_download_file: "https://github.com/solo-io/gloo/releases/download/v{{ gloo_ee_version }}/glooctl-linux-amd64"
+  when: ansible_os_family == "Darwin" 
+
+- name: "Find the sha256 of glooctl"
+  ansible.builtin.slurp:
+    src: /tmp/glooctl.sha256
+  register: glooctl.sha256
+
+- name: "Make glooctl home"
+  ansible.builitin.file:
+    path: "{{ ansible_env.HOME }}/.gloo/bin"
+    recurse: yes
+    state: directory
+  
+- name: "Download glooctl"
+  ansible.builitin.get_url:
+    uri: "{{ glooctl_download_file }}"
+    checksum: "sha256:{{ glooctl.sha256['content'] | b64decode | split(' ') | first | trim  }}"
+    dest: "{{ ansible_env.HOME }}/.gloo/bin/glooctl"
+    mode: 755
+
+#- debug:
+#    var: gloo_install_tmpdir
+
+- name: "Create Gloo EE Helm Values"
+  template:
+    src: "edge_override_values.yaml.j2"
+    dest: "{{ gloo_install_tmpdir.path }}/install-overrides.yaml"
+  register: gloo_install_override_file
+
+- name: "Create Gloo Portal Helm Values"
+  template:
+    src: "portal_values.yaml.j2"
+    dest: "{{ gloo_install_tmpdir.path }}/portal_values.yaml"
+  register: gloo_portal_override_file
+
+- name: "Set Gloo Helm Value File Facts"
+  set_fact:
+    edge_override_files: "{{ edge_override_files + [gloo_install_override_file.dest] }}"
+    portal_override_files: "{{ portal_override_files + [gloo_portal_override_file.dest] }}"
+
+- name: "Deploy all Gloo Edge Enterprise"
+  kubernetes.core.helm:
+    release_name: gloo
+    chart_ref: glooe/gloo-ee
+    release_namespace: gloo-system
+    create_namespace: yes
+    chart_version: "{{ gloo_ee_version }}"
+    values_files: "{{ edge_override_files }}"
+    wait: yes
+    wait_timeout: 5m
+  loop: "{{ gloo_edge | dict2items}}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: "Deploy Gloo Portal"
+  kubernetes.core.helm:
+    release_name: gloo-portal
+    chart_ref: gloo-portal/gloo-portal
+    chart_version: "{{ gloo_portal_version }}"
+    release_namespace: gloo-portal
+    create_namespace: yes
+    values_files: "{{ portal_override_files }}"
+    wait: yes
+    wait_timeout: 5m
+  loop: "{{ gloo_edge | dict2items}}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: enable_portal | bool
+  
