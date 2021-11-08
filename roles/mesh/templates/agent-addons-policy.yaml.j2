@@ -1,4 +1,5 @@
 #jinja2: lstrip_blocks: "True"
+{% set cluster_name = item.value.cluster_name %}
 apiVersion: networking.mesh.gloo.solo.io/v1
 kind: AccessPolicy
 metadata:
@@ -8,11 +9,9 @@ spec:
   sourceSelector:
   - kubeServiceAccountRefs:
       serviceAccounts:
-       {% for k,v in gloo_clusters.items() %}
         - name: istio-ingressgateway-service-account
           namespace: [[ istio_namespace ]]
-          clusterName: v.cluster_name
-       {% endfor %}
+          clusterName: [[ cluster_name ]]
   - kubeIdentityMatcher:
       namespaces:
       - gloo-mesh-addons

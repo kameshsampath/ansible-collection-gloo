@@ -1,5 +1,5 @@
-- debug:
-   var: gloo_clusters
+# - debug:
+#    var: gloo_clusters
 
 - name: "Get Relay Root TLS"
   kubernetes.core.k8s_info:
