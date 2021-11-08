@@ -1,0 +1,22 @@
+#jinja2: lstrip_blocks: "True"
+apiVersion: networking.mesh.gloo.solo.io/v1
+kind: AccessPolicy
+metadata:
+  namespace: [[ gloo_mesh_namespace ]]
+  name: gloo-mesh-addons
+spec:
+  sourceSelector:
+  - kubeServiceAccountRefs:
+      serviceAccounts:
+       {% for k,v in gloo_clusters.items() %}
+        - name: istio-ingressgateway-service-account
+          namespace: [[ istio_namespace ]]
+          clusterName: v.cluster_name
+       {% endfor %}
+  - kubeIdentityMatcher:
+      namespaces:
+      - gloo-mesh-addons
+  destinationSelector:
+  - kubeServiceMatcher:
+      namespaces:
+      - gloo-mesh-addons

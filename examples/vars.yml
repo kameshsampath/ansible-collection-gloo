@@ -1,4 +1,7 @@
-# miniukube Kubernetes Clusters
+work_dir: "{{ playbook_dir }}/work"
+kubeconfig_dir: "{{ work_dir }}/.kube"
+minikube_kubernetes_version: "v1.21.6"
+# minikube Kubernetes Clusters
 minikube_profiles:
   mgmt:
     create: yes
@@ -23,11 +26,14 @@ gloo_clusters:
     cloud: minikube
     k8s_context: mgmt
     install_istio: no
+    cluster_name: mgmt
   cluster1:
     cloud: minikube
     k8s_context: cluster1
     install_istio: yes
+    cluster_name: cluster1
   cluster2:
     cloud: minikube
     k8s_context: cluster2
     install_istio: yes
+    cluster_name: cluster2

@@ -32,7 +32,7 @@
 
 - name: "Gloo Mesh Version"
   debug: 
-    var: gloo_mesh_ee_version }}
+    var: gloo_mesh_ee_version
 
 - name: "Set Gloo EE License Facts"
   set_fact:
@@ -103,7 +103,7 @@
 
 - name: "Create Gloo Mesh EE Helm Values"
   template:
-    src: "mesh_override_values.yaml.j2"
+    src: "mesh-override-values.yaml.j2"
     dest: "{{ gloo_mesh_install_tmpdir.path }}/install-overrides.yaml"
   register: gloo_mesh_install_override_file
 
@@ -138,10 +138,5 @@
   when: item.key == "mgmt"
 # TODO Register meshes
 
-- name: "Register Cluster to Mesh"
-  debug:
-   msg: "Register mesh {{ item.key }}"
-  loop: "{{ gloo_clusters | dict2items}}"
-  loop_control:
-    label: "{{ item.key }}"
-  when: item.key != "mgmt"
+- name: "Register Clusters to Mesh"
+  include: register_cluster.yml
