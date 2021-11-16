@@ -1,4 +1,6 @@
 portal_enable: yes
-edge_override_files: []
-portal_override_files: []
 enable_edge_federation: no
+gloo_home_dir: "{{ work_dir | default( ansible_env.HOME + '/.gloo' ) }}"
+releaseQuery: '[*].tag_name'
+gloo_install_override_files: []
+gloo_portal_override_files: []

@@ -35,13 +35,19 @@
     msg: "Gloo EE Version or Gloo Portal Version not available"
   when: gloo_portal_version_info.stdout is not defined or gloo_portal_version_info.stdout is not defined
 
+- name: "Get Latest glooctl release"
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/solo-io/gloo/releases
+    body: 'application/vnd.github.v3+json'
+    return_content: yes
+  register: glooctl_versions
+   
 - name: "Set Gloo Facts"
   set_fact:
-    edge_license_key: "{{ lookup('env', 'LICENSE_KEY') }}"
+    edge_license_key: "{{ lookup('env', 'GLOO_EDGE_LICENSE_KEY') }}"
+    glooctl_version: "{{ glooctl_version | default( glooctl_versions.content | from_json | json_query(releaseQuery) | kameshsampath.gloo.sort_versions | first ) }}"
     gloo_ee_version: "{{ gloo_ee_version_info.stdout  | from_json | first | community.general.json_query('version') }}"
     gloo_portal_version: "{{ gloo_portal_version_info.stdout  | from_json | first | community.general.json_query('version') }}"
-    gloo_install_override_files: []
-    gloo_portal_override_files: []
 
 - name: "Ensure Gloo License Key is defined"
   fail:
@@ -54,79 +60,66 @@
     prefix: "{{ 'gloo_ee_'+ gloo_ee_version }}"
   register: gloo_install_tmpdir
 
-- name: "Download glooctl(linux) checksum"
-  ansible.builitin.get_url:
-    uri: "https://github.com/solo-io/gloo/releases/download/v{{ gloo_ee_version }}/glooctl-linux-amd64.sha256"
-    dest: "/tmp/glooctl.sha256"
-    mode: 755
-  when: ansible_os_family == "RedHat" or  ansible_os_family == "Debian" 
-
-- name: "Download glooctl(linux) checksum"
-  ansible.builitin.get_url:
-    uri: "https://github.com/solo-io/gloo/releases/download/v{{ gloo_ee_version }}/glooctl-darwin-amd64.sha256"
-    dest: "/tmp/glooctl.sha256"
-    mode: 755
-  when: ansible_os_family == "Darwin"
-
-- name: "Ensure glooctl File for {{ ansible_os_family}}"
+- name: "Ensure glooctl File for darwin"
   set_fact:
-    glooctl_download_file: "https://github.com/solo-io/gloo/releases/download/v{{ gloo_ee_version }}/glooctl-linux-amd64"
+    glooctl_download_file: "https://github.com/solo-io/gloo/releases/download/{{ glooctl_version }}/glooctl-linux-amd64"
   when: ansible_os_family == "RedHat" or  ansible_os_family == "Debian"
 
-- name: "Ensure glooctl File for {{ ansible_os_family}}"
+- name: "Ensure glooctl File for macos"
   set_fact:
-    glooctl_download_file: "https://github.com/solo-io/gloo/releases/download/v{{ gloo_ee_version }}/glooctl-linux-amd64"
+    glooctl_download_file: "https://github.com/solo-io/gloo/releases/download/{{ glooctl_version }}/glooctl-darwin-amd64"
   when: ansible_os_family == "Darwin" 
 
-- name: "Find the sha256 of glooctl"
-  ansible.builtin.slurp:
-    src: /tmp/glooctl.sha256
-  register: glooctl.sha256
+- name: "Ensure gloo home directory"
+  ansible.builtin.file:
+    path: "{{ gloo_home_dir }}/bin"
+    state: directory
 
 - name: "Make glooctl home"
-  ansible.builitin.file:
-    path: "{{ ansible_env.HOME }}/.gloo/bin"
-    recurse: yes
+  ansible.builtin.file:
+    path: "{{ gloo_home_dir }}/bin"
     state: directory
+    mode: '0755'
   
 - name: "Download glooctl"
-  ansible.builitin.get_url:
-    uri: "{{ glooctl_download_file }}"
-    checksum: "sha256:{{ glooctl.sha256['content'] | b64decode | split(' ') | first | trim  }}"
-    dest: "{{ ansible_env.HOME }}/.gloo/bin/glooctl"
-    mode: 755
+  ansible.builtin.get_url:
+    url: "{{ glooctl_download_file }}"
+    checksum: "sha256:{{ glooctl_download_file }}.sha256"
+    dest: "{{ gloo_home_dir }}/bin/glooctl"
+    mode: '0755'
 
 #- debug:
 #    var: gloo_install_tmpdir
 
 - name: "Create Gloo EE Helm Values"
-  template:
+  ansible.builtin.template:
     src: "edge_override_values.yaml.j2"
     dest: "{{ gloo_install_tmpdir.path }}/install-overrides.yaml"
   register: gloo_install_override_file
 
 - name: "Create Gloo Portal Helm Values"
-  template:
+  ansible.builtin.template:
     src: "portal_values.yaml.j2"
     dest: "{{ gloo_install_tmpdir.path }}/portal_values.yaml"
   register: gloo_portal_override_file
 
 - name: "Set Gloo Helm Value File Facts"
   set_fact:
-    edge_override_files: "{{ edge_override_files + [gloo_install_override_file.dest] }}"
-    portal_override_files: "{{ portal_override_files + [gloo_portal_override_file.dest] }}"
+    gloo_install_override_files: "{{ gloo_install_override_files + [gloo_install_override_file.dest] }}"
+    gloo_portal_override_files: "{{ gloo_portal_override_files + [gloo_portal_override_file.dest] }}"
 
-- name: "Deploy all Gloo Edge Enterprise"
+- name: "Deploy Gloo Edge Enterprise"
   kubernetes.core.helm:
     release_name: gloo
     chart_ref: glooe/gloo-ee
     release_namespace: gloo-system
     create_namespace: yes
     chart_version: "{{ gloo_ee_version }}"
-    values_files: "{{ edge_override_files }}"
+    values_files: "{{ gloo_install_override_files }}"
     wait: yes
     wait_timeout: 5m
-  loop: "{{ gloo_edge | dict2items}}"
+    context: "{{ item.value.k8s_context }}"
+  loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
 
@@ -137,11 +130,12 @@
     chart_version: "{{ gloo_portal_version }}"
     release_namespace: gloo-portal
     create_namespace: yes
-    values_files: "{{ portal_override_files }}"
+    values_files: "{{ gloo_portal_override_files }}"
     wait: yes
     wait_timeout: 5m
-  loop: "{{ gloo_edge | dict2items}}"
+    context: "{{ item.value.k8s_context }}"
+  loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
-  when: enable_portal | bool
+  when: item.value.enable_portal | bool
   

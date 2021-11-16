@@ -1,18 +1,5 @@
 license_key: {{ edge_license_key }}
 gloo:
-  discovery:
-    enabled: true
-    fdsMode: DISABLED
-  settings:
-    writeNamespace: gloo-system
-    watchNamespaces:
-       - default
-       - gloo-system
-       - gloo-portal
-       - bookinfo
-       - keycloak
-       - bookinfo-beta
-       - bookinfo
   gatewayProxies:
     gatewayProxy:
       failover:
