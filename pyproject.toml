@@ -13,6 +13,7 @@ kubernetes = "^19.15.0"
 jsonpatch = "^1.32"
 mkdocs = "^1.2.3"
 mkdocs-material = "^7.3.6"
+autopep8 = "^1.6.0"
 
 [tool.poetry.dev-dependencies]
 
