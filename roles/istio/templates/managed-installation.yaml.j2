@@ -1,0 +1,91 @@
+#jinja2: lstrip_blocks: "True"
+apiVersion: admin.enterprise.mesh.gloo.solo.io/v1alpha1
+kind: IstioLifecycleManager
+metadata:
+  name: [[ installation_name ]]
+  namespace: gloo-mesh
+spec:
+  clusters:
+  {% for k,v in gloo_clusters.items() %}
+    {% if v.install_istio | default(false) %}
+    - name: [[ v.cluster_name | default(k) ]]
+    {% endif %}
+  {% endfor %}
+  installations:
+    - name: [[ installation_name ]]-base
+      istioOperatorSpec:
+        profile: minimal
+        tag: [[ istio_version ]]
+        hub: gcr.io/istio-enterprise
+        namespace: [[ istio_install_namespace ]]
+        meshConfig:
+          # this will overwritten by lifecycle manager to right cluster name
+          trustDomain: "cluster1"
+          enableTracing: true
+          defaultConfig:
+            envoyMetricsService:
+              address: enterprise-agent.gloo-mesh:9977
+            envoyAccessLogService:
+              address: enterprise-agent.gloo-mesh:9977
+            proxyMetadata:
+              ISTIO_META_DNS_CAPTURE: "true"
+              ISTIO_META_DNS_AUTO_ALLOCATE: "true"
+              # this will overwritten by lifecycle manager to right cluster name
+              GLOO_MESH_CLUSTER_NAME: "mycluster1"
+        components:
+          base:
+            enabled: true
+          pilot:
+            enabled: true
+          ingressGateways:
+          - name: istio-ingressgateway
+            enabled: false
+          - name: istio-eastwestgateway
+            enabled: false
+          egressGateways:
+          - name: istio-egressgateway
+            enabled: false
+        values:
+          global:
+            network: [[ istio_network_name ]]
+    - name: [[ installation_name ]]-gateways
+      istioOperatorSpec:
+        profile: empty
+        hub: gcr.io/istio-enterprise
+        namespace: [[ istio_gateways_namespace ]]
+        tag: [[ istio_version ]]
+        revision: [[ istio_revision ]]
+        components:
+          ingressGateways:
+            - name: [[ installation_name ]]-gateway
+              namespace: [[ istio_gateways_namespace ]]
+              enabled: true
+              label:
+                istio: ingressgateway
+                version: [[ istio_revision ]]
+                app: istio-ingressgateway
+                # matches spec.values.global.network in istiod deployment
+                topology.istio.io/network: [[ istio_network_name ]]
+              k8s:
+                service:
+                  # Since we created our own LoadBalanced service, tell istio to create a ClusterIP service for this gateway
+                  type: ClusterIP
+                  ports:
+                    - name: status-port
+                      port: 15021
+                      targetPort: 15021
+                    - name: http2
+                      port: 80
+                      targetPort: 8080
+                    - name: https
+                      port: 443
+                      targetPort: 8443
+                    - name: tcp
+                      port: 31400
+                      targetPort: 31400
+                    - name: tls
+                      port: 15443
+                      targetPort: 15443
+        values:
+          global:
+            network: [[ istio_network_name ]]

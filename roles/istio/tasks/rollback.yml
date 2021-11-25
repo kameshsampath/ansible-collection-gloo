@@ -1,0 +1,91 @@
+- name: "Set Istio Revision Facts"
+  set_fact:
+     istio_revision: "{{ istio_version | regex_replace(istio_revision_regex,'solo-\\g<major>-\\g<minor>') }}"
+
+- name: "Istio Version Facts"
+  debug:
+    msg: "Istio Version {{ istio_version }} and Revision {{ istio_revision }}"
+
+- name: "Set Managed Istio Install Facts"
+  set_fact:
+    installation_name: "{{ istio_installation_name | default ( ['my-istio',istio_revision] | join('-') ) }}"
+    isito_ingress_gateway_name: "{{ isito_ingress_gateway_name | default ( ['my-istio',istio_revision,'gateway'] | join('-') ) }}"
+
+- name: "Delete IstioLifecycle Manager"
+  kubernetes.core.k8s:
+    state: absent
+    template:
+      - path: managed-installation.yaml.j2
+        variable_start_string: '[['
+        variable_end_string: ']]'
+    context: "{{ mgmt_k8s_context }}"
+
+- name: "Delete Gloo Managed Istio Operator on {{ gloo_agent_cluster_name }}"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: install.istio.io/v1alpha1
+    kind: IstioOperator
+    name: "istio-operator-{{ istio_revision }}"
+    namespace: "gloo-mesh-iop-{{ istio_revision }}"     
+    context: "{{ gloo_agent_cluster.k8s_context }}"
+
+- name: "Get Managed Istio Operators"
+  kubernetes.core.k8s_info:
+    api_version: install.istio.io/v1alpha1
+    kind: IstioOperator
+    namespace: istio-system
+    label_selectors:
+        - "cluster.multicluster.solo.io"
+        - "owner.networking.mesh.gloo.solo.io=gloo-mesh"
+    context: "{{ gloo_agent_cluster.k8s_context }}"
+  register: installed_iops
+
+# Get operators by label and delete 
+
+- name: "Set Istio Operators Created by Gloo"
+  set_fact:
+    gloo_mesh_istio_iops: "{{ installed_iops | json_query(gloo_mesh_iops_query) }}"
+
+- name: "Installed Operators"
+  debug:
+   var: gloo_mesh_istio_iops
+
+- name: "Delete Managed Istio Operators"
+  kubernetes.core.k8s:
+    api_version: install.istio.io/v1alpha1
+    kind: IstioOperator
+    namespace: "{{ item.namespace }}"
+    name: "{{ item.name }}"
+    state: absent
+    label_selectors:
+        - "cluster.multicluster.solo.io"
+        - "owner.networking.mesh.gloo.solo.io=gloo-mesh"
+    context: "{{ gloo_agent_cluster.k8s_context }}"
+  loop: "{{ gloo_mesh_istio_iops }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Delete namespaces
+- name: "Delete namespaces"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Namespace
+    name: "{{ item }}"
+    context: "{{ gloo_agent_cluster.k8s_context }}"
+  loop:
+   - "gloo-mesh-iop-{{ istio_revision }}"   
+   - "{{ istio_install_namespace }}"   
+   - "{{ istio_gateways_namespace }}"
+
+# Remove Label
+- name: "Label default Namespace with {{ istio_revision }} on cluster {{ gloo_agent_cluster_name }}"
+  kubernetes.core.k8s:
+    state: present
+    kind: Namespace
+    name: default
+    definition:
+      metadata:
+        labels:
+          istio.io/rev:
+    context: "{{ gloo_agent_cluster.k8s_context }}"

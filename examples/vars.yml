@@ -1,6 +1,10 @@
 work_dir: "{{ playbook_dir }}/work"
 kubeconfig_dir: "{{ work_dir }}/.kube"
 minikube_kubernetes_version: "v1.21.6"
+# Istio config
+istio_installs:
+  1.11.4:
+    install: yes
 # minikube Kubernetes Clusters
 minikube_profiles:
   mgmt:

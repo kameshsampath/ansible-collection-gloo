@@ -1,0 +1,55 @@
+- name: "Set Istio Revision Facts"
+  set_fact:
+     istio_revision: "{{ istio_version | regex_replace(istio_revision_regex,'solo-\\g<major>-\\g<minor>') }}"
+
+- name: "Istio Version Facts"
+  debug:
+    msg: "Istio Version {{ istio_version }} and Revision {{ istio_revision }}"
+
+- name: "Set Managed Istio Install Facts"
+  set_fact:
+    installation_name: "{{ istio_installation_name | default ( ['my-istio',istio_revision] | join('-') ) }}"
+    isito_ingress_gateway_name: "{{ isito_ingress_gateway_name | default ( ['my-istio',istio_revision,'gateway'] | join('-') ) }}"
+
+- name: "Install Managed Istio"
+  kubernetes.core.k8s:
+    state: present
+    template:
+      - path: managed-installation.yaml.j2
+        variable_start_string: '[['
+        variable_end_string: ']]'
+    context: "{{ mgmt_k8s_context }}"
+
+- name: "Wait for istiod deployment to be running on cluster {{ gloo_agent_cluster_name }}"
+  include: utils/deployment_check.yml
+  vars:
+    deployment_name: "istiod-{{ istio_revision }}"
+    deployment_namespace: "{{ istio_install_namespace }}"
+    deployment_context: "{{ gloo_agent_cluster.k8s_context }}"
+
+- name: "Wait for istio-ingressgateway deployment to be running on cluster {{ gloo_agent_cluster_name }}"
+  include: utils/deployment_check.yml
+  vars:
+    deployment_name: "{{ isito_ingress_gateway_name }}"
+    deployment_namespace: "{{ istio_gateways_namespace }}"
+    deployment_context: "{{ gloo_agent_cluster.k8s_context }}"
+
+- name: "Create/Update IstioIngressGateway Service on cluster {{ gloo_agent_cluster_name }}"
+  kubernetes.core.k8s:
+    state: present
+    template:
+      - path: istio-ingressgateway-service.yaml.j2
+        variable_start_string: '[['
+        variable_end_string: ']]'
+    context: "{{ gloo_agent_cluster.k8s_context }}"
+
+- name: "Label default Namespace with {{ istio_revision }} on cluster {{ gloo_agent_cluster_name }}"
+  kubernetes.core.k8s:
+    state: patched
+    kind: Namespace
+    name: default
+    definition:
+      metadata:
+        labels:
+          istio.io/rev: "{{ istio_revision }}"
+    context: "{{ gloo_agent_cluster.k8s_context }}"

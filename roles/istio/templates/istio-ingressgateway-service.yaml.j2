@@ -1,11 +1,9 @@
 #jinja2: lstrip_blocks: "True"
-{% set istio_version = item.0.key %}
-{% set istio_revision = item.0.value.revision %}
 apiVersion: v1
 kind: Service
 metadata:
   name: istio-ingressgateway
-  namespace: istio-gateways
+  namespace: [[ istio_gateways_namespace ]]
 spec:
   type: LoadBalancer
   selector:

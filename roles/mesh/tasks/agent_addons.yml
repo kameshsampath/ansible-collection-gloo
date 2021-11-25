@@ -1,0 +1,38 @@
+- name: "Create gloo-mesh-addons namespace on Agent {{ gloo_agent_cluster_name }}"
+  kubernetes.core.k8s:
+    context: "{{ gloo_agent_cluster.k8s_context }}"
+    definition:
+      kind: Namespace
+      version: v1
+      metadata:
+        name: gloo-mesh-addons
+        labels:
+          istio-injection: enabled
+      state: present
+
+- name: "Create temporary gloo agent install directory"
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: "{{ ['gloo_mesh_ee_agent_addons',gloo_agent_cluster_name, gloo_mesh_agent_version] | join('_') }}"
+  register: gloo_mesh_agent_addons_tmpdir
+
+- name: "Create Gloo Mesh Agent Addons EE Helm Values"
+  template:
+    src: "agent-addons-values.yaml.j2"
+    dest: "{{ gloo_mesh_agent_addons_tmpdir.path }}/install-overrides.yaml"
+  register: gloo_mesh_agent_addons_file
+
+- name: "Set Gloo Agent Helm Value File Facts"
+  set_fact:
+    gloo_mesh_agent_addons_files: "{{ gloo_mesh_agent_addons_files + [gloo_mesh_agent_addons_file.dest] }}"
+
+- name: "Deploy Gloo Mesh Enterprise Agent Addons on Agent {{ gloo_agent_cluster_name  }}"
+  kubernetes.core.helm:
+    release_name: enterprise-agent-addons
+    chart_ref: enterprise-agent/enterprise-agent
+    release_namespace: gloo-mesh-addons
+    create_namespace: yes
+    chart_version: "{{ gloo_mesh_agent_version }}"
+    values_files: "{{ gloo_mesh_agent_addons_files }}"
+    update_repo_cache: yes
+    context: "{{ gloo_agent_cluster.k8s_context }}"

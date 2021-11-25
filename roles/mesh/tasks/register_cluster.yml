@@ -1,19 +1,26 @@
-# - debug:
-#    var: gloo_clusters
+- name: "Agent Name"
+  debug:
+    var: gloo_agent_cluster_name
+
+- name: "Agent Cluster Info"
+  debug:
+    var: gloo_agent_cluster
+
+- name: "Enterprise Networking Relay Address"
+  debug:
+    var: relay_address
+  
+# - fail:
+#     msg: "checkpoint"
 
 - name: "Get Relay Root TLS"
   kubernetes.core.k8s_info:
-    context: "{{ gloo_cluster_item.value.k8s_context }}"
+    context: "{{ mgmt_k8s_context }}"
     namespace: gloo-mesh
     kind: secret
     version: v1
     name: relay-root-tls-secret
-  loop: "{{ gloo_clusters | dict2items }}"
-  loop_control:
-    label: "{{ gloo_cluster_item.key }}"
-    loop_var: gloo_cluster_item
   register: relay_root_tls
-  when: gloo_cluster_item.key == 'mgmt'
 
 # - debug:
 #     var: relay_root_tls
@@ -21,22 +28,16 @@
 - name: "Fail when tls secret not found"
   fail:
     msg: "Invalid Realay Root TLS"
-  when: relay_root_tls.results[0].resources | length == 0 or relay_root_tls.results[0].resources[0].data is not defined
-
+  when: relay_root_tls.resources | length == 0 or relay_root_tls.resources[0].data is not defined
 
 - name: "Get Relay Identity Token"
   kubernetes.core.k8s_info:
-    context: "{{ gloo_cluster_item.value.k8s_context }}"
+    context: "{{ mgmt_k8s_context }}"
     namespace: gloo-mesh
     kind: secret
     version: v1
     name: relay-identity-token-secret
-  loop: "{{ gloo_clusters | dict2items }}"
-  loop_control:
-    label: "{{ gloo_cluster_item.key }}"
-    loop_var: gloo_cluster_item
   register: relay_identity_token
-  when: gloo_cluster_item.key == 'mgmt'
 
 # - debug:
 #     var: relay_root_tls
@@ -44,84 +45,55 @@
 - name: "Fail when relay_identity_token secret not found"
   fail:
     msg: "Invalid Relay Identity Token"
-  when: relay_identity_token.results[0].resources | length == 0 or relay_identity_token.results[0].resources[0].data is not defined
-
+  when: relay_identity_token.resources | length == 0 or relay_identity_token.resources[0].data is not defined
 
 - name: "Set Gloo Mesh Agent Root CA Fact"
   set_fact:
-    relay_root_tls_ca_crt: "{{ relay_root_tls_item.resources[0].data['ca.crt']  }}"
-  loop: "{{ relay_root_tls.results }}"
-  loop_control:
-    label: "{{ relay_root_tls_item.gloo_cluster_item.value.k8s_context }}"
-    loop_var: relay_root_tls_item
-  when: relay_root_tls_item.gloo_cluster_item.value.k8s_context == "mgmt"
+    relay_root_tls_ca_crt: "{{ relay_root_tls.resources[0].data['ca.crt']  }}"
 
 # - debug:
 #     var: relay_root_tls_ca_crt
 
 - name: "Set Gloo Mesh Agent Token Fact"
   set_fact:
-    relay_token: "{{ relay_token_item.resources[0].data.token }}"
-  loop: "{{ relay_identity_token.results }}"
-  loop_control:
-    label: "{{ relay_token_item.gloo_cluster_item.value.k8s_context }}"
-    loop_var: relay_token_item
-  when: relay_token_item.gloo_cluster_item.value.k8s_context == "mgmt"
+    relay_token: "{{ relay_identity_token.resources[0].data.token }}"
 
 # - debug:
 #     var: relay_token
 
 - name: "Create gloo-mesh namespace"
   kubernetes.core.k8s:
-    context: "{{ gloo_cluster_item.value.k8s_context }}"
+    context: "{{ gloo_agent_cluster.k8s_context }}"
     kind: Namespace
     version: v1
     name: gloo-mesh
     state: present
-  loop: "{{ gloo_clusters | dict2items }}"
-  loop_control:
-    label: "{{ gloo_cluster_item.key }}"
-    loop_var: gloo_cluster_item
-  register: relay_root_tls
-  when: gloo_cluster_item.key != 'mgmt'
 
-- name: "Create Relay Root CA Cert"
+- name: "Create Relay Root CA Cert on Agent {{ gloo_agent_cluster_name }}"
   kubernetes.core.k8s:
-    context: "{{ gloo_cluster_item.value.k8s_context }}"
+    context: "{{ gloo_agent_cluster.k8s_context }}"
     definition:
       kind: Secret
       version: v1
       metadata:
         name: relay-root-tls-secret
-        namespace: gloo-mesh
+        namespace: "{{ gloo_mesh_namespace }}"
       data:
         ca.crt: "{{ relay_root_tls_ca_crt }}"
     state: present
-  loop: "{{ gloo_clusters | dict2items }}"
-  loop_control:
-    label: "{{ gloo_cluster_item.key }}"
-    loop_var: gloo_cluster_item
-  register: relay_root_tls
-  when: gloo_cluster_item.key != 'mgmt'
 
-- name: "Create Relay Identity Token"
+- name: "Create Relay Identity Token on Agent {{ gloo_agent_cluster_name }}"
   kubernetes.core.k8s:
-    context: "{{ gloo_cluster_item.value.k8s_context }}"
+    context: "{{ gloo_agent_cluster.k8s_context }}"
     definition:
       kind: Secret
       version: v1
       metadata:
         name: relay-identity-token-secret
-        namespace: gloo-mesh
+        namespace: "{{ gloo_mesh_namespace }}"
       data:
         token: "{{ relay_token }}"
     state: present
-  loop: "{{ gloo_clusters | dict2items }}"
-  loop_control:
-    label: "{{ gloo_cluster_item.key }}"
-    loop_var: gloo_cluster_item
-  register: relay_root_tls
-  when: gloo_cluster_item.key != 'mgmt'
 
 - name: "Add Gloo Mesh Agent Helm Repo"
   kubernetes.core.helm_repository:
@@ -132,7 +104,7 @@
   ansible.builtin.command:
     argv:
       - helm
-      - search 
+      - search
       - repo
       - enterprise-agent/enterprise-agent
       - -ojson
@@ -151,167 +123,53 @@
   when: gloo_mesh_agent_version is not defined
 
 - name: "Gloo Mesh Agent Version"
-  debug: 
-    var: gloo_mesh_agent_version
-  
-- name: "Get Relay Endpoint Address"
-  kubernetes.core.k8s_info:
-    context: "{{ gloo_cluster_item.value.k8s_context }}"
-    namespace: gloo-mesh
-    kind: Service
-    version: v1
-    name: enterprise-networking
-  loop: "{{ gloo_clusters | dict2items }}"
-  loop_control:
-    label: "{{ gloo_cluster_item.key }}"
-    loop_var: gloo_cluster_item
-  register: enterprise_networking_svc_result
-  when: gloo_cluster_item.key == 'mgmt'
-
-- name: "Fail when enterprise-networking service not found"
-  fail:
-    msg: "Enterprise Networking Service not found"
-  when: enterprise_networking_svc_result.results[0].resources | length == 0
-
-- name: "Set Enterprise Networking Facts"
-  set_fact: 
-    grpc_ports: "{{ svc_item | json_query(grpc_ports_query) | first }}"
-    load_balancer: "{{ svc_item | json_query(lb_query) | first }}"
-  loop: "{{ enterprise_networking_svc_result.results }}"
-  loop_control:
-    loop_var: svc_item
-    label: "{{ svc_item.gloo_cluster_item.key }}"
-  when: svc_item.resources is defined and svc_item.resources | length == 1
-  vars:
-      grpc_ports_query: 'resources[*].spec.ports[?name==`grpc`]'
-      lb_query: 'resources[*].status.loadBalancer'
-
-- name: "Get the Load Balancer Address"
-  set_fact:
-    service_ip: "{{ load_balancer | json_query(lb_address_query) | first }}"
-    use_nodeport: false
-  when:  load_balancer | length > 0
-  vars:
-    lb_address_query: 'ingress[*]'
-
-# - debug:
-#     var: grpc_ports
-
-- name: "Use LoadBalancer IP for Relay Address"
-  set_fact:
-    relay_address: "{{ service_ip }}:{{ ( grpc_ports | first ).port }}"
-  when: ( service_ip is defined or service_ip | length > 0 ) and not use_nodeport
-
-- name: "Get Gloo Mesh Management Nodes IP"
-  kubernetes.core.k8s_info:
-    context: "{{ gloo_cluster_item.value.k8s_context }}"
-    kind: Node
-    version: v1
-  loop: "{{ gloo_clusters | dict2items }}"
-  loop_control:
-    label: "{{ gloo_cluster_item.key }}"
-    loop_var: gloo_cluster_item
-  register: gloo_cluster_mgmt_nodes
-  when: gloo_cluster_item.key == 'mgmt' and (service_ip is not defined or service_ip | length == 0 )
-
-- name: "Extract Node IPs"
-  set_fact:
-    node_ips: "{{ gloo_cluster_mgmt_nodes.results[0] | json_query(node_ip_query) | flatten }}"
-    use_nodeport: true
-  vars:
-    node_ip_query: "resources[*].status.addresses[?type==`InternalIP`].address"
-  when: service_ip is not defined or service_ip | length == 0
-
-- name: "Use Node IP for Gloo Mesh Relay Address"
-  set_fact:
-    relay_address: "{{ node_ips | random }}:{{ ( grpc_ports | first ).nodePort }}"
-  when: use_nodeport
-
-- name: "Enterprise Networking Relay Address"
   debug:
-    var: relay_address
+    var: gloo_mesh_agent_version
+
+- name: "Create temporary gloo agent install directory"
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: "{{ ['gloo_mesh_ee_agent', gloo_agent_cluster_name, gloo_mesh_agent_version] | join('_') }}"
+  register: gloo_mesh_agent_install_tmpdir
+
+- name: "Create Gloo Mesh Agent EE Helm Values"
+  template:
+    src: "agent-values.yaml.j2"
+    dest: "{{ gloo_mesh_agent_install_tmpdir.path }}/install-overrides.yaml"
+  register: gloo_mesh_agent_install_override_file
+
+- name: "Set Gloo Agent Helm Value File Facts"
+  set_fact:
+    gloo_mesh_agent_override_files: "{{ gloo_mesh_agent_override_files + [gloo_mesh_agent_install_override_file.dest] }}"
 
 - name: "Deploy Gloo Mesh Enterprise Agent"
   kubernetes.core.helm:
     release_name: enterprise-agent
     chart_ref: enterprise-agent/enterprise-agent
-    release_namespace: gloo-mesh
+    release_namespace: "{{ gloo_mesh_namespace }}"
     create_namespace: yes
     chart_version: "{{ gloo_mesh_agent_version }}"
-    values: "{{ lookup('template', 'agent-values.yaml.j2') | from_yaml }}"
+    values_files: "{{ gloo_mesh_agent_override_files }}"
     update_repo_cache: yes
-    context: "{{ item.value.k8s_context }}"
-  loop: "{{ gloo_clusters | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
-  when: item.key != "mgmt"
+    context: "{{ gloo_agent_cluster.k8s_context }}"
 
 - name: "Create/Update Gloo Mesh Kubernetes Clusters"
   kubernetes.core.k8s:
     state: present
-    template:
-      - path: mesh-cluster.yaml.j2
-        variable_start_string: '[['
-        variable_end_string: ']]'
-    context: "{{ gloo_clusters['mgmt'].k8s_context }}"
-  loop: "{{ gloo_clusters | dict2items}}"
-  loop_control:
-    label: "{{ item.key }}"
-  when: item.key != 'mgmt'
+    definition:
+      apiVersion: multicluster.solo.io/v1alpha1
+      kind: KubernetesCluster
+      metadata:
+        name: "{{ gloo_agent_cluster_name }}"
+        namespace: "{{ gloo_mesh_namespace }}"
+      spec:
+        clusterDomain: "{{ mesh_cluster_domain }}"
+    context: "{{ mgmt_k8s_context }}"
 
 - name: "Wait for Enteprise Networking Agent Pod to be running"
   include: utils/deployment_check.yml
   vars:
     deployment_name: enterprise-agent
     deployment_namespace: gloo-mesh
-    deployment_context: "{{ item.value.k8s_context }}"
-  loop: "{{ gloo_clusters | dict2items}}"
-  loop_control:
-    label: "{{ item.key }}"
-  when: item.key != "mgmt"
+    deployment_context: "{{ gloo_agent_cluster.k8s_context }}"
 
-- name: "Create gloo-mesh-addons namespace"
-  kubernetes.core.k8s:
-    context: "{{ gloo_cluster_item.value.k8s_context }}"
-    definition:
-      kind: Namespace
-      version: v1
-      metadata:
-        name: gloo-mesh-addons
-        labels:
-          istio-injection: enabled
-      state: present
-  loop: "{{ gloo_clusters | dict2items }}"
-  loop_control:
-    label: "{{ gloo_cluster_item.key }}"
-    loop_var: gloo_cluster_item
-  register: relay_root_tls
-  when: gloo_cluster_item.key != 'mgmt'
-
-- name: "Deploy Gloo Mesh Enterprise Agent Addons"
-  kubernetes.core.helm:
-    release_name: enterprise-agent-addons
-    chart_ref: enterprise-agent/enterprise-agent
-    release_namespace: gloo-mesh-addons
-    create_namespace: yes
-    chart_version: "{{ gloo_mesh_agent_version }}"
-    values: "{{ lookup('template', 'agent-addons-values.yaml.j2') | from_yaml }}"
-    update_repo_cache: yes
-    context: "{{ item.value.k8s_context }}"
-  loop: "{{ gloo_clusters | dict2items}}"
-  loop_control:
-    label: "{{ item.key }}"
-  when: item.key != "mgmt"
-
-- name: "Create/Update Gloo Mesh Agent Addons Policy"
-  kubernetes.core.k8s:
-    state: present
-    template:
-      - path: agent-addons-policy.yaml.j2
-        variable_start_string: '[['
-        variable_end_string: ']]'
-    context: "{{ gloo_clusters['mgmt'].k8s_context }}"
-  loop: "{{ gloo_clusters | dict2items}}"
-  loop_control:
-    label: "{{ item.key }}"
-  when: item.key != 'mgmt'

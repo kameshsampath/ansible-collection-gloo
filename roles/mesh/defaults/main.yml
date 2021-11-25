@@ -1,6 +1,10 @@
 gloo_mesh_install_override_files: []
+gloo_mesh_agent_override_files: []
+gloo_mesh_agent_addons_files: []
 grpc_ports_query: 'resources[*].spec.ports[?name==`grpc`]'
 lb_query: 'resources[*].status.loadBalancer'
 lb_address_query: 'ingress[*]'
 gloo_mesh_namespace: gloo-mesh
 istio_namespace: istio-system
+mesh_cluster_domain: cluster.local
+bin_dir: "{{ work_dir }}/bin"

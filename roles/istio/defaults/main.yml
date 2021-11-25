@@ -1,13 +1,10 @@
-istio_namespaces:
-  - istio-operator
-  - istio-system
-  - istio-gateways
-  - istio-config
-istio_installs:
-  1.11.4:
-    # darwin-sha256: 663496e25e7de52ecb00e600cb54496c98e619f97629ba5c1841b4eb34e902c0
-    # linux-sha256: 32707044bff538b8e827eae21dd3694dac78d429d9aeeb9ee606882e3b938499
-    install: yes
-    #k8s_contexts:
-      # - cluster1 
-      # - cluster2 
+istio_install_namespace: istio-system
+istio_gateways_namespace: istio-system
+istio_version: 1.11.4
+istio_network_name: mymeshnetwork
+istio_trust_domain: "{{ mesh_cluster_domain | default('cluster.local') }}"
+istio_trust_domain_aliases: []
+istio_revision_regex: '(?P<major>^\d{1,3})\.(?P<minor>\d{1,3})\.(?P<patch>\d{1,3})(?P<rc>\-*\w*\.*\d*)$'
+# TODO - ability to add the operator specs from local file system
+istio_operator_specs: []
+gloo_mesh_iops_query: 'resources[?spec.revision == `{{ istio_revision }}`].{name: metadata.name, namespace: metadata.namespace }'

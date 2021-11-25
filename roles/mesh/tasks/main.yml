@@ -1,7 +1,12 @@
+- name: "Ensure {{ bin_dir }}"
+  ansible.builtin.file:
+    state: directory
+    path: "{{ bin_dir }}"
+
 - name: "Ensure Gloo Mesh Clusters"
   fail:
     msg: "Please define the Kubernetes clusters for Gloo Mesh using 'gloo_clusters' dictionary"
-  when: gloo_clusters is not defined 
+  when: gloo_clusters is not defined
 
 - name: "Add Gloo Mesh Helm Repo"
   kubernetes.core.helm_repository:
@@ -12,7 +17,7 @@
   ansible.builtin.command:
     argv:
       - helm
-      - search 
+      - search
       - repo
       - gloo-mesh-enterprise/gloo-mesh-enterprise
       - -ojson
@@ -31,7 +36,7 @@
   when: gloo_mesh_ee_version is not defined
 
 - name: "Gloo Mesh Version"
-  debug: 
+  debug:
     var: gloo_mesh_ee_version
 
 - name: "Set Gloo EE License Facts"
@@ -51,53 +56,41 @@
 
 - name: "Ensure meshctl File for RedHat/Ubuntu"
   ansible.builtin.get_url:
-    url: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-linux-amd64.sha256"
+    url: "https://storage.googleapis.com/meshctl/{{ gloo_mesh_ee_version }}/meshctl-linux-amd64.sha256"
     dest: "/tmp/meshctl.sha256"
-  when: ansible_os_family == "RedHat" or  ansible_os_family == "Debian" 
+  when: ansible_os_family == "RedHat" or  ansible_os_family == "Debian"
 
 - name: "Ensure meshctl File for Darwin"
   ansible.builtin.get_url:
-    url: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-darwin-amd64.sha256"
+    url: "https://storage.googleapis.com/meshctl/{{ gloo_mesh_ee_version }}/meshctl-darwin-amd64.sha256"
     dest: "/tmp/meshctl.sha256"
   when: ansible_os_family == "Darwin"
 
 - name: "Ensure meshctl File for RedHat/Ubuntu"
   set_fact:
-    meshctl_download_file: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-linux-amd64"
-    meshctl_sha256_checksum: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-darwin-amd64.sha256"
+    meshctl_download_file: "https://storage.googleapis.com/meshctl/{{ gloo_mesh_ee_version }}/meshctl-linux-amd64"
   when: ansible_os_family == "RedHat" or  ansible_os_family == "Debian"
-
-- name: "Ensure meshctl File for Darwin"
-  set_fact:
-    meshctl_download_file: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-darwin-amd64"
-    meshctl_sha256_checksum: "https://storage.googleapis.com/meshctl/v{{ gloo_mesh_ee_version }}/meshctl-darwin-amd64.sha256"
-  when: ansible_os_family == "Darwin" 
 
 - name: "Find the sha256 of meshctl"
   ansible.builtin.slurp:
     src: /tmp/meshctl.sha256
   register: meshctl_sha256
 
-- name: "Make meshctl home"
-  ansible.builtin.file:
-    path: "{{ ansible_env.HOME }}/.gloo/bin"
-    recurse: yes
-    state: directory
-  
-- name: "Set meshctl sha256 checksum" 
-  set_fact: 
-    meshctl_sha256_checksum: "{{ meshctl_sha256.content | b64decode | split(' ') | first | trim }}"
+- name: "Ensure meshctl File for Darwin"
+  set_fact:
+    meshctl_download_file: "https://storage.googleapis.com/meshctl/{{ gloo_mesh_ee_version }}/meshctl-darwin-amd64"
+    meshctl_checksum: "{{ meshctl_sha256['content'] | b64decode |regex_search('(?P<checksum>^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)(.*)$','\\g<checksum>') | first }}"
+  when: ansible_os_family == "Darwin"
 
-- name: "Ensure Gloo bin"
-  ansible.builtin.file:
-    path: "{{ ansible_env.HOME }}/.gloo-mesh/bin"
-    state: directory
+- name: "meshctl checksum"
+  debug:
+    msg: "{{ meshctl_checksum  }}"
 
 - name: "Download meshctl"
   ansible.builtin.get_url:
     url: "{{ meshctl_download_file }}"
-    checksum: "sha256:{{ meshctl_sha256_checksum  }}"
-    dest: "{{ ansible_env.HOME }}/.gloo-mesh/bin/meshctl"
+    checksum: "sha256:{{ meshctl_checksum }}"
+    dest: "{{ bin_dir }}/meshctl"
     mode: "0755"
   register: downloaded_meshctl
 
@@ -110,6 +103,21 @@
 - name: "Set Gloo Helm Value File Facts"
   set_fact:
     gloo_mesh_install_override_files: "{{ gloo_mesh_install_override_files + [gloo_mesh_install_override_file.dest] }}"
+
+# - name: "Template Gloo Mesh Enterprise"
+#   kubernetes.core.helm_template:
+#     chart_ref: gloo-mesh-enterprise/gloo-mesh-enterprise
+#     chart_version: "{{ gloo_mesh_ee_version }}"
+#     values_files: "{{ gloo_mesh_install_override_files }}"
+#     output_dir: "{{ work_dir }}/temp"
+#   loop: "{{ gloo_clusters | dict2items}}"
+#   loop_control:
+#     label: "{{ item.key }}"
+#   register: enterprise_networking_result
+#   when: item.key == "mgmt"
+
+# - fail:
+#    msg: "checkpoint"
 
 - name: "Deploy Gloo Mesh Enterprise"
   kubernetes.core.helm:
@@ -136,7 +144,95 @@
   loop_control:
     label: "{{ item.key }}"
   when: item.key == "mgmt"
-# TODO Register meshes
+
+- name: "Wait for rbac-webhook Pod to be running"
+  include: utils/deployment_check.yml
+  vars:
+    deployment_name: rbac-webhook
+    deployment_namespace: gloo-mesh
+    deployment_context: "{{ item.value.k8s_context }}"
+  loop: "{{ gloo_clusters | dict2items}}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.key == "mgmt"
+
+## Agent Regisrations Registration
+
+- name: "Get Relay Endpoint Address"
+  kubernetes.core.k8s_info:
+    context: "{{ gloo_clusters.mgmt.k8s_context }}"
+    namespace: gloo-mesh
+    kind: Service
+    version: v1
+    name: enterprise-networking
+  register: enterprise_networking_svc_result
+
+# - debug:
+#     var: enterprise_networking_svc_result
+
+- name: "Fail when enterprise-networking service not found"
+  fail:
+    msg: "Enterprise Networking Service not found"
+  when: enterprise_networking_svc_result.resources | length == 0
+
+- name: "Set Enterprise Networking Facts"
+  set_fact:
+    grpc_ports: "{{ enterprise_networking_svc_result | json_query(grpc_ports_query) | first }}"
+    load_balancer: "{{ enterprise_networking_svc_result | json_query(lb_query) | first }}"
+  vars:
+    grpc_ports_query: "resources[*].spec.ports[?name==`grpc`]"
+    lb_query: "resources[*].status.loadBalancer"
+
+- name: "Get the Load Balancer Address"
+  set_fact:
+    service_ip: "{{ load_balancer | json_query(lb_address_query) | first }}"
+    use_nodeport: false
+  when: load_balancer | length > 0
+  vars:
+    lb_address_query: "ingress[*]"
+
+# - debug:
+#     var: grpc_ports
+
+- name: "Use LoadBalancer IP for Relay Address"
+  set_fact:
+    relay_address: "{{ service_ip.ip }}:{{ ( grpc_ports | first ).port }}"
+  when: ( service_ip is defined and service_ip.ip is defined ) and not use_nodeport
+
+- name: "Use LoadBalancer Hostname for Relay Address"
+  set_fact:
+    relay_address: "{{ service_ip.address }}:{{ ( grpc_ports | first ).port }}"
+  when: ( service_ip is defined and service_ip.address is defined ) and not use_nodeport
+
+- name: "Get Gloo Mesh Management Nodes IP"
+  kubernetes.core.k8s_info:
+    context: "{{ gloo_clusters.mgmt.k8s_context }}"
+    kind: Node
+    version: v1
+  when: not relay_address is defined
+
+- name: "Extract Node IPs"
+  set_fact:
+    node_ips: "{{ gloo_cluster_mgmt_nodes.results[0] | json_query(node_ip_query) | flatten }}"
+    use_nodeport: true
+  vars:
+    node_ip_query: "resources[*].status.addresses[?type==`InternalIP`].address"
+  when: not relay_address is defined
+
+- name: "Use Node IP for Gloo Mesh Relay Address"
+  set_fact:
+    relay_address: "{{ node_ips | random }}:{{ ( grpc_ports | first ).nodePort }}"
+  when: use_nodeport
 
 - name: "Register Clusters to Mesh"
   include: register_cluster.yml
+  vars:
+    gloo_agent_cluster: "{{ gloo_cluster_item.value }}"
+    gloo_agent_cluster_name: "{{ gloo_cluster_item.value.cluster_name | default( gloo_cluster_item.key )  }}"
+    mgmt_k8s_context: "{{ gloo_clusters.mgmt.k8s_context  }}"
+  loop: "{{ gloo_clusters | dict2items }}"
+  loop_control:
+    label: "{{ gloo_cluster_item.key }}"
+    loop_var: gloo_cluster_item
+  register: gloo_cluster_mgmt_nodes
+  when: gloo_cluster_item.key != "mgmt"

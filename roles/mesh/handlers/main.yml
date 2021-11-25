@@ -1,0 +1,12 @@
+- name: "Create/Update Gloo Mesh Agent Addons Policy"
+  kubernetes.core.k8s:
+    state: present
+    template:
+      - path: agent-addons-policy.yaml.j2
+        variable_start_string: '[['
+        variable_end_string: ']]'
+    context: "{{ gloo_clusters['mgmt'].k8s_context }}"
+  loop: "{{ gloo_clusters | dict2items | product( istio_installs | dict2items )}}"
+  loop_control:
+    label: "{{ item.0.key }}"
+  when: item.0.key == 'mgmt'
