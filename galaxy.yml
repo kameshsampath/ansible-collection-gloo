@@ -1,6 +1,6 @@
 namespace: kameshsampath
 name: gloo
-version: 0.0.2
+version: 0.0.3
 readme: README.md
 authors:
   - Kamesh Sampath <kamesh.sampath@hotmail.com>
