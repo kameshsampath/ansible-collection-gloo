@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.0.4](https://www.github.com/kameshsampath/ansible-collection-gloo/compare/v0.0.3...v0.0.4) (2021-12-01)
+
+
+### Bug Fixes
+
+* workflow update fix poetry action ([c146a3e](https://www.github.com/kameshsampath/ansible-collection-gloo/commit/c146a3e8bb520fa68d733a28c2c5fc20ffc97674))
+
 ### [0.0.3](https://www.github.com/kameshsampath/ansible-collection-gloo/compare/v0.0.2...v0.0.3) (2021-12-01)
 
 
