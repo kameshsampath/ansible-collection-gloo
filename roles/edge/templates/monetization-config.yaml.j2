@@ -1,0 +1,13 @@
+#jinja2: lstrip_blocks: "True"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monetization-config
+  namespace: "{{ gloo_namespace }}"
+data:
+  storage-type: "postgres"
+  config.yaml: | # Edge and Portal will mount this volume and read this field as a YAML file
+    secretpath: /etc/monetization/secret
+    host: "postgresql.{{ gloo_edge_namespace }}.svc.cluster.local"
+    db: "{{ gloo_monetization_db }}"
+    port: 5432

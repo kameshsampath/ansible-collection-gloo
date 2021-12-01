@@ -1,6 +1,12 @@
 portal_enable: yes
 enable_edge_federation: no
+gloo_edge_namespace: gloo-system
+gloo_portal_namespace: gloo-portal
 gloo_home_dir: "{{ work_dir | default( ansible_env.HOME + '/.gloo' ) }}"
 releaseQuery: '[*].tag_name'
 gloo_install_override_files: []
 gloo_portal_override_files: []
+gloo_monetization_db: gloo-portal-db
+gloo_monetization_db_username: postgres
+gloo_monetization_db_password: password
+enable_portal_monetization: no

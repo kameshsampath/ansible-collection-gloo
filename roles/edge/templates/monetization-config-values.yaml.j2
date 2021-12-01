@@ -1,0 +1,56 @@
+#jinja2: lstrip_blocks: "True"
+global:
+  extensions:
+    extAuth:
+      deployment:
+        # Specify the monetization config and secret as volumes for the extauth deployment
+        extraVolume:
+          - name: monetization-config
+            configMap:
+              name: monetization-config
+          - name: monetization-secret
+            secret:
+              secretName: monetization-secret
+        # Mount the volumes
+        extraVolumeMount:
+          - name: monetization-config
+            mountPath: /etc/monetization/storage-config
+            readOnly: true
+          - name: monetization-secret
+            mountPath: /etc/monetization/secret
+            readOnly: true
+        # Set this env to enable monetization
+        customEnv:
+          - name: MONETIZATION_ENABLED
+            value: "true"
+gloo:
+  gatewayProxies:
+    gatewayProxy:
+      gatewaySettings:
+        # Configure envoy to stream access logs to the "extauth" cluster
+        accessLoggingService:
+          accessLog:
+            - grpcService:
+                logName: "monetization-log"
+                staticClusterName: "extauth"
+      # Access log clusters need to be static, so let's add "extauth" as a static cluster
+      envoyStaticClusters:
+        - name: extauth # we use the extauth server as an access log service to enable monetization
+          connect_timeout: 5.000s
+          type: STRICT_DNS
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+              # Explicitly require HTTP/2
+              explicit_http_config:
+                http2_protocol_options: {}
+          lb_policy: ROUND_ROBIN
+          load_assignment:
+            cluster_name: extauth
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: extauth.gloo-system.svc.cluster.local
+                          port_value: 8083
