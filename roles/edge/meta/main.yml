@@ -1,0 +1,23 @@
+galaxy_info:
+  role_name: edge
+  author: kameshsampath
+  description: Ansible role to install solo.io Gloo Edge
+
+  license: 'license(Apache-2)'
+
+  min_ansible_version: 2.9
+
+  platforms:
+    - name: EL
+      versions:
+      - all
+    - name: Debian
+      versions:
+      - all
+    - name: Ubuntu
+      versions:
+      - all
+  galaxy_tags:
+    - gloo
+    - edge
+dependencies: []

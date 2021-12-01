@@ -74,3 +74,5 @@ playbook.yml
 cleanup.yml
 test.yml
 __pycache__
+*.tar.gz
+dist
