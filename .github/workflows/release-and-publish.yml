@@ -62,7 +62,7 @@ jobs:
         uses: actions/github-script@v4.0.1
         env:
           TAG_NAME: ${{ github.event.release.tag_name }}
-          ASSET_NAME: "kameshsampath-kubernetes_spices-${{ steps.collection-info.outputs.galaxy_version }}"
+          ASSET_NAME: "kameshsampath-gloo-${{ steps.collection-info.outputs.galaxy_version }}"
           ASSET_FILE: "${{ github.workspace }}/${{ env.DIST_DIR }}/${{ steps.collection-info.outputs.collection_tarfile }}"
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
