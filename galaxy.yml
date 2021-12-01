@@ -1,18 +1,11 @@
 namespace: kameshsampath
-
 name: gloo
-
-version: 0.0.1
-
+version: 0.0.2
 readme: README.md
-
 authors:
   - Kamesh Sampath <kamesh.sampath@hotmail.com>
-
 description: Ansible collection to install and configure Solo.io Gloo Edge, Mesh and Portal.
-
 license_file: 'LICENSE'
-
 tags:
   - gloo
   - edge
@@ -21,20 +14,14 @@ tags:
   - kubernetes
   - api
   - gateway
-
 dependencies:
   ansible.posix: '>=1.2.0'
   community.general: '>=1.2.0'
   kubernetes.core: '>=2.2.0'
-
 repository: https://github.com/kameshsampath/kameshsampath.gloo
-
 documentation: https://kameshsampath.github.com/kameshsampath.gloo
-
 homepage: https://github.com/kameshsampath/kameshsampath.gloo
-
 issues: https://github.com/kameshsampath/kameshsampath.gloo/issue/tracker
-
 build_ignore:
   - .env
   - poetry.lock
