@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.0.3](https://www.github.com/kameshsampath/ansible-collection-gloo/compare/v0.0.2...v0.0.3) (2021-12-01)
+
+
+### Bug Fixes
+
+* workflow python version ([995067c](https://www.github.com/kameshsampath/ansible-collection-gloo/commit/995067c0e2d72f9da2b4f73635a8a61d45f81008))
+
 ### [0.0.2](https://www.github.com/kameshsampath/ansible-collection-gloo/compare/v0.0.1...v0.0.2) (2021-12-01)
 
 
