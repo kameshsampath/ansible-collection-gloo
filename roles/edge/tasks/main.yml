@@ -25,6 +25,7 @@
       - -ojson
   register: gloo_ee_version_info
   changed_when: false
+  when: gloo_ee_version is not defined
 
 - name: "Query Gloo Portal Versions"
   ansible.builtin.command:
@@ -36,6 +37,7 @@
       - -ojson
   register: gloo_portal_version_info
   changed_when: false
+  when: gloo_portal_version is not defined
 
 - name: "Fail when version info does not exist"
   fail:
@@ -53,18 +55,26 @@
   set_fact:
     edge_license_key: "{{ lookup('env', 'GLOO_EDGE_LICENSE_KEY') }}"
     glooctl_version: "{{ glooctl_version | default( glooctl_versions.content | from_json | json_query(releaseQuery) | kameshsampath.gloo.sort_versions | first ) }}"
-    gloo_ee_version: "{{ gloo_ee_version_info.stdout  | from_json | first | community.general.json_query('version') }}"
-    gloo_portal_version: "{{ gloo_portal_version_info.stdout  | from_json | first | community.general.json_query('version') }}"
 
+- name: "Set Gloo Edge Version Fact"
+  set_fact:
+    gloo_ee_version: "{{ gloo_ee_version_info.stdout  | from_json | first | community.general.json_query('version') }}"
+  when: gloo_ee_version is not defined 
+  
+- name: "Set Gloo Portal Version Fact"
+  set_fact:
+    gloo_portal_version: "{{ gloo_portal_version_info.stdout  | from_json | first | community.general.json_query('version') }}"
+  when: gloo_portal_version is not defined 
+  
 - name: "Ensure Gloo License Key is defined"
   fail:
-    msg: "Gloo License Key not defined, please define it via environment variable '$LICENSE_KEY'"
+    msg: "Gloo License Key not defined, please define it via environment variable '$GLOO_EDGE_LICENSE_KEY'"
   when: edge_license_key is not defined
 
 - name: "Create temporary gloo install directory"
-  ansible.builtin.tempfile:
+  ansible.builtin.file:
     state: directory
-    prefix: "{{ 'gloo_ee_'+ gloo_ee_version }}"
+    path: "{{ work_dir + '/' + gloo_ee_version }}"
   register: gloo_install_tmpdir
 
 - name: "Ensure glooctl File for darwin"
@@ -112,8 +122,8 @@
 
 - name: "Set Gloo Helm Value File Facts"
   set_fact:
-    gloo_install_override_files: "{{ gloo_install_override_files + [gloo_install_override_file.dest] }}"
-    gloo_portal_override_files: "{{ gloo_portal_override_files + [gloo_portal_override_file.dest] }}"
+    gloo_install_override_files: "{{ [gloo_install_override_file.dest]  + gloo_install_override_files }}"
+    gloo_portal_override_files: "{{  [gloo_portal_override_file.dest] + gloo_portal_override_files }}"
 
 - name: "Create Gloo Portal Helm Values for monetization"
   ansible.builtin.template:
@@ -126,7 +136,7 @@
 
 - name: "Add Helm Values for monetization"
   set_fact:
-    gloo_install_override_files: "{{ gloo_install_override_files + [gloo_portal_monetize_config_file.dest] }}"
+    gloo_install_override_files: "{{ [gloo_portal_monetize_config_file.dest] + gloo_install_override_files }}"
   when: ( enable_portal_monetization | bool )
 
 - name: "Add a bitnami repository"
@@ -134,7 +144,18 @@
     name: bitnami
     repo_url: https://charts.bitnami.com/bitnami
   when: ( enable_portal_monetization | bool )
-
+  
+- name: "Create {{ gloo_edge_namespace }}"
+  kubernetes.core.k8s:
+     state: present
+     kind: Namespace
+     name: "{{ gloo_edge_namespace }}"
+     context: "{{ item.value.k8s_context }}"
+  loop: "{{ gloo_clusters | dict2items}}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.key != 'mgmt'
+  
 - name: "Create Monetization Postgresql Schema"
   kubernetes.core.k8s:
      state: present
@@ -144,7 +165,7 @@
   loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
-  when: ( item.value.enable_portal | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
+  when: item.key != 'mgmt' and ( enable_portal_monetization | bool) and ( item.value.enable_portal |  default('no') | bool ) 
 
 - name: "Deploy Postgresql (gloo monetization)"
   kubernetes.core.helm:
@@ -159,15 +180,26 @@
           postgresqlUsername: "{{ gloo_monetization_db_username }}"
           postgresqlPassword: "{{ gloo_monetization_db_password }}"
           servicePort: 5432
-        initdbScriptsConfigMap: postgres-schema
+      initdbScriptsConfigMap: postgres-schema
     update_repo_cache: yes
     context: "{{ item.value.k8s_context }}"
     wait: yes
   loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
-  when: ( item.value.enable_portal | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
+  when: ( enable_portal_monetization | bool) and ( item.value.enable_portal |  default('no') | bool ) and  item.key != 'mgmt' 
 
+- name: "Create {{ gloo_portal_namespace }}"
+  kubernetes.core.k8s:
+     state: present
+     kind: Namespace
+     name: "{{ gloo_portal_namespace }}"
+     context: "{{ item.value.k8s_context }}"
+  loop: "{{ gloo_clusters | dict2items}}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: ( item.value.enable_portal |  default('no') | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
+  
 - name: "Create Monetization Secret"
   kubernetes.core.k8s:
      state: present
@@ -177,7 +209,7 @@
   loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
-  when: ( item.value.enable_portal | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
+  when: ( item.value.enable_portal |  default('no') | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
   vars:
     gloo_namespace: "{{ gloo_edge_namespace }}"
 
@@ -190,7 +222,7 @@
   loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
-  when: ( item.value.enable_portal | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
+  when: ( item.value.enable_portal |  default('no') | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
   vars:
     gloo_namespace: "{{ gloo_portal_namespace }}"
 
@@ -203,7 +235,7 @@
   loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
-  when: ( item.value.enable_portal | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
+  when: ( item.value.enable_portal |  default('no') | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
   vars:
     gloo_namespace: "{{ gloo_edge_namespace }}"
 
@@ -216,7 +248,7 @@
   loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
-  when: ( item.value.enable_portal | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
+  when: ( item.value.enable_portal |  default('no') | bool ) and  item.key != 'mgmt' and ( enable_portal_monetization | bool)
   vars:
     gloo_namespace: "{{ gloo_portal_namespace }}"
 
@@ -234,6 +266,22 @@
   loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
+    
+- name: "Deploy Gloo Edge Enterprise Federation"
+  kubernetes.core.helm:
+    release_name: gloo
+    chart_ref: glooe/gloo-ee
+    release_namespace: gloo-system
+    create_namespace: yes
+    chart_version: "{{ gloo_ee_version }}"
+    values: "{{ lookup('template', 'edge_federation_values.yaml.j2') | from_yaml }}"
+    wait: yes
+    wait_timeout: 5m
+    context: "{{ item.value.k8s_context }}"
+  loop: "{{ gloo_clusters | dict2items}}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.value.enable_federation | default('no') | bool
 
 - name: "Deploy Gloo Portal"
   kubernetes.core.helm:
@@ -249,5 +297,5 @@
   loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
-  when: item.value.enable_portal | bool
+  when: item.value.enable_portal  | default('no') | bool
   

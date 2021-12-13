@@ -1,5 +1,4 @@
 portal_enable: yes
-enable_edge_federation: no
 gloo_edge_namespace: gloo-system
 gloo_portal_namespace: gloo-portal
 gloo_home_dir: "{{ work_dir | default( ansible_env.HOME + '/.gloo' ) }}"
