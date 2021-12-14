@@ -1,0 +1,13 @@
+#jinja2: lstrip_blocks: "True"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ gloo_cluster_name }}-gloo-federation-controller-clusterrole-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gloo-federation-controller
+subjects:
+- kind: ServiceAccount
+  name: {{ gloo_cluster_name }}
+  namespace: {{ gloo_edge_namespace }}

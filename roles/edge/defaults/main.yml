@@ -9,3 +9,4 @@ gloo_monetization_db: gloo-portal-db
 gloo_monetization_db_username: postgres
 gloo_monetization_db_password: password
 enable_portal_monetization: no
+management_cluster_query: "[?value.enable_federation == `true` ].{k8s_context: value.k8s_context, cluster_name: value.cluster_name || key }"

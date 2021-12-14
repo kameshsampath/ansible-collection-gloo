@@ -1,0 +1,7 @@
+apiVersion: fed.solo.io/v1
+kind: GlooInstance
+metadata:
+  name: {{ gloo_cluster_name }}-gloo-system
+  namespace: {{ gloo_edge_namespace }}
+spec:
+  cluster: {{ gloo_cluster_name }}

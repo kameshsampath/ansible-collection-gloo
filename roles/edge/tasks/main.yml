@@ -266,23 +266,24 @@
   loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
-    
-- name: "Deploy Gloo Edge Enterprise Federation"
-  kubernetes.core.helm:
-    release_name: gloo
-    chart_ref: glooe/gloo-ee
-    release_namespace: gloo-system
-    create_namespace: yes
-    chart_version: "{{ gloo_ee_version }}"
-    values: "{{ lookup('template', 'edge_federation_values.yaml.j2') | from_yaml }}"
-    wait: yes
-    wait_timeout: 5m
-    context: "{{ item.value.k8s_context }}"
+
+- name: "Is Federation Enabled"
+  set_fact:
+    gloo_edge_federation_enabled: "{{  gloo_clusters | dict2items | json_query(q) | flatten | list | length > 0 }}"
+  vars:
+    q: "[?value.enable_federation == `true`]"
+
+- name: "Federate Gloo Clusters"
+  include_tasks: register_clusters.yaml
   loop: "{{ gloo_clusters | dict2items}}"
   loop_control:
     label: "{{ item.key }}"
-  when: item.value.enable_federation | default('no') | bool
-
+  when: gloo_edge_federation_enabled and not ( item.value.enable_federation | default('no') | bool )
+  vars:
+    gloo_cluster_name: "{{ item.value.cluster_name | default(item.key) }}"
+    gloo_cluster_k8s_cluster_config_name: "{{ item.key }}"
+    gloo_cluster_context: "{{ item.value.k8s_context }}"
+  
 - name: "Deploy Gloo Portal"
   kubernetes.core.helm:
     release_name: gloo-portal

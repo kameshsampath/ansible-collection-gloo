@@ -1,0 +1,47 @@
+  
+- name: "Set Gloo Federation Facts" 
+  set_fact:
+    gloo_fed_management_cluster: "{{  gloo_clusters | dict2items | json_query(management_cluster_query) | first }}"
+
+- name: "Slurp federated cluster kubeconfig"
+  ansible.builtin.slurp:
+    src: "{{ work_dir }}/.kube/{{ gloo_cluster_k8s_cluster_config_name }}.kubeconfig"
+  register: gloo_federated_cluster_kubeconfig
+
+- name: "Fail if Gloo Management Cluster Context not found"
+  fail:
+    msg: "{{ }} cluster config not find"
+  when: gloo_fed_management_cluster is not defined
+
+
+- name: "Fail if Cluster Kubeconfig not Found"
+  fail:
+    msg: "{{ }} cluster config not find"
+  when: gloo_federated_cluster_kubeconfig.content is not defined 
+
+- name: "Create Service Account"
+  kubernetes.core.k8s:
+    state: present
+    api_version: v1
+    kind: ServiceAccount
+    name: "{{ gloo_cluster_name }}"
+    namespace: "{{ gloo_edge_namespace }}"
+    context: "{{ gloo_cluster_context }}"
+
+- name: "Create Cluster Role and Binding in Federated Cluster"
+  kubernetes.core.k8s:
+    state: present
+    template:
+      - path: "federation_controller_cluster_role.yaml.j2"
+      - path: "federation_controller_cluster_role_binding.yaml.j2"
+    context: "{{ gloo_cluster_context }}"
+    
+- name: "Create Federated Instance"
+  kubernetes.core.k8s:
+    state: present
+    template:
+      - path: "gloo_instance.yaml.j2"
+      - path: "gloo_instance_secret.yaml.j2"
+    context: "{{ gloo_fed_management_cluster.k8s_context }}"
+    
+
