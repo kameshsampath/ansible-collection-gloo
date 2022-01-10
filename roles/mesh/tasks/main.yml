@@ -142,7 +142,7 @@
   when: item.key == "mgmt"
 
 - name: "Wait for Enteprise Networking Pod to be running"
-  include: utils/deployment_check.yml
+  include_tasks: utils/deployment_check.yml
   vars:
     deployment_name: enterprise-networking
     deployment_namespace: gloo-mesh
@@ -236,7 +236,7 @@
   when: use_nodeport
 
 - name: "Register Clusters to Mesh"
-  include: register_cluster.yml
+  include_tasks: register_cluster.yml
   vars:
     gloo_agent_cluster: "{{ gloo_cluster_item.value }}"
     gloo_agent_cluster_name: "{{ gloo_cluster_item.value.cluster_name | default( gloo_cluster_item.key )  }}"

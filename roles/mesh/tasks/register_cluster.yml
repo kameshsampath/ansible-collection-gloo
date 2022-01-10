@@ -167,7 +167,7 @@
     context: "{{ mgmt_k8s_context }}"
 
 - name: "Wait for Enteprise Networking Agent Pod to be running"
-  include: utils/deployment_check.yml
+  include_tasks: utils/deployment_check.yml
   vars:
     deployment_name: enterprise-agent
     deployment_namespace: gloo-mesh

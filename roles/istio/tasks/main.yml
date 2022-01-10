@@ -1,5 +1,5 @@
 - name: "Install Istio"
-  include: install.yml
+  include_tasks: install.yml
   vars:
     gloo_agent_cluster: "{{ gloo_cluster_item.value }}"
     gloo_agent_cluster_name: "{{ gloo_cluster_item.value.cluster_name | default( gloo_cluster_item.key )  }}"
@@ -12,7 +12,7 @@
   when: gloo_cluster_item.value.install_istio | default(false)
 
 - name: "Rollback Istio"
-  include: rollback.yml
+  include_tasks: rollback.yml
   vars:
     gloo_agent_cluster: "{{ gloo_cluster_item.value }}"
     gloo_agent_cluster_name: "{{ gloo_cluster_item.value.cluster_name | default( gloo_cluster_item.key )  }}"

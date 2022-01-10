@@ -21,14 +21,14 @@
     context: "{{ mgmt_k8s_context }}"
 
 - name: "Wait for istiod deployment to be running on cluster {{ gloo_agent_cluster_name }}"
-  include: utils/deployment_check.yml
+  include_tasks: utils/deployment_check.yml
   vars:
     deployment_name: "istiod-{{ istio_revision }}"
     deployment_namespace: "{{ istio_install_namespace }}"
     deployment_context: "{{ gloo_agent_cluster.k8s_context }}"
 
 - name: "Wait for istio-ingressgateway deployment to be running on cluster {{ gloo_agent_cluster_name }}"
-  include: utils/deployment_check.yml
+  include_tasks: utils/deployment_check.yml
   vars:
     deployment_name: "{{ isito_ingress_gateway_name }}"
     deployment_namespace: "{{ istio_gateways_namespace }}"
