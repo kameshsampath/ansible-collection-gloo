@@ -13,6 +13,13 @@
     name: gloo-mesh-enterprise
     repo_url: "https://storage.googleapis.com/gloo-mesh-enterprise/gloo-mesh-enterprise"
 
+- name: "Refresh Helm Repositories"
+  ansible.builtin.command:
+    argv:
+      - helm
+      - repo
+      - update
+      
 - name: "Query Gloo Mesh Versions"
   ansible.builtin.command:
     argv:
