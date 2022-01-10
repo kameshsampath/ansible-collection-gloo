@@ -1,5 +1,16 @@
 # Changelog
 
+### [0.0.5](https://www.github.com/kameshsampath/ansible-collection-gloo/compare/v0.0.4...v0.0.5) (2022-01-10)
+
+
+### Bug Fixes
+
+* add helm repo update ([cea0766](https://www.github.com/kameshsampath/ansible-collection-gloo/commit/cea07663a626133fa09a32448b6642d217eb831b))
+* enable gloo edge federation ([e3e7f26](https://www.github.com/kameshsampath/ansible-collection-gloo/commit/e3e7f2638c0550e7972537ca3a53cf6416946672))
+* mesh registration ([01fb336](https://www.github.com/kameshsampath/ansible-collection-gloo/commit/01fb33639889e6bef25d7a891ce3e92b146d148f))
+* register the clusters for edge federation ([4ed1bec](https://www.github.com/kameshsampath/ansible-collection-gloo/commit/4ed1bec60599eaccb3b7d3d4f9a5d85326d2b604))
+* use include_tasks over deprecated include ([a5cc738](https://www.github.com/kameshsampath/ansible-collection-gloo/commit/a5cc738c2797f5c98ca2907a8c9cafebe63e609f))
+
 ### [0.0.4](https://www.github.com/kameshsampath/ansible-collection-gloo/compare/v0.0.3...v0.0.4) (2021-12-01)
 
 
