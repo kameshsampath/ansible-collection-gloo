@@ -1,6 +1,7 @@
 #jinja2: lstrip_blocks: "True"
 license_key: {{ edge_license_key }}
-gatewayProxies:
-  gatewayProxy:
-    failover:
-      enabled: (item.value.enable_federation | default('no') | bool)
+gloo:
+  gatewayProxies:
+    gatewayProxy:
+      failover:
+        enabled: {{ (item.value.enable_federation | default('no') | bool) }}

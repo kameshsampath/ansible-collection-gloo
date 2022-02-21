@@ -10,9 +10,8 @@
 
 - name: "Fail if Gloo Management Cluster Context not found"
   fail:
-    msg: "{{ }} cluster config not find"
+    msg: "{{ gloo_fed_management_cluster }} cluster config not found"
   when: gloo_fed_management_cluster is not defined
-
 
 - name: "Fail if Cluster Kubeconfig not Found"
   fail:
