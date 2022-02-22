@@ -252,11 +252,11 @@
   vars:
     gloo_namespace: "{{ gloo_portal_namespace }}"
 
-- debug:
-    var: gloo_install_override_files
-    
-- fail:
-    msg: "checkpoint"
+#- debug:
+#    var: gloo_install_override_files
+#    
+#- fail:
+#    msg: "checkpoint"
     
 - name: "Deploy Gloo Edge Enterprise"
   kubernetes.core.helm:
