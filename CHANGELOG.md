@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.0.7](https://www.github.com/kameshsampath/ansible-collection-gloo/compare/v0.0.6...v0.0.7) (2022-02-22)
+
+
+### Bug Fixes
+
+* remove debug checkpoint ([2837c33](https://www.github.com/kameshsampath/ansible-collection-gloo/commit/2837c33d882edb15860697352d2c49076f262abf))
+
 ### [0.0.6](https://www.github.com/kameshsampath/ansible-collection-gloo/compare/v0.0.5...v0.0.6) (2022-02-21)
 
 
