@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.0.6](https://www.github.com/kameshsampath/ansible-collection-gloo/compare/v0.0.5...v0.0.6) (2022-02-21)
+
+
+### Bug Fixes
+
+* missing jinja template string ([e7a6ed9](https://www.github.com/kameshsampath/ansible-collection-gloo/commit/e7a6ed962826c7b2ea90411f171431043a3349ab))
+
 ### [0.0.5](https://www.github.com/kameshsampath/ansible-collection-gloo/compare/v0.0.4...v0.0.5) (2022-01-10)
 
 
